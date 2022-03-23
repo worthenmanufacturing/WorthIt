@@ -368,10 +368,12 @@ void Extruder::manageTemperatures() {
 }
 
 void TemperatureController::waitForTargetTemperature() {
-    if (targetTemperatureC < 30)
+    if (targetTemperatureC < 30) {
         return;
-    if (Printer::debugDryrun())
+    }
+    if (Printer::debugDryrun()) {
         return;
+    }
     bool oldReport = Printer::isAutoreportTemp();
     Printer::setAutoreportTemp(true);
     //millis_t time = HAL::timeInMilliseconds();
@@ -689,8 +691,13 @@ void Extruder::initExtruder() {
 #endif
     }
 #if HEATED_BED_HEATER_PIN > -1
+#if BED_HARDWARE_PWM
+    Printer::bedPWMPin = HAL::initHardwarePWM(HEATED_BED_HEATER_PIN, BED_HARDWARE_PWM);
+    HAL::setHardwarePWM(Printer::bedPWMPin, 0);
+#else
     SET_OUTPUT(HEATED_BED_HEATER_PIN);
     WRITE(HEATED_BED_HEATER_PIN, HEATER_PINS_INVERTED);
+#endif
     Extruder::initHeatedBed();
 #endif
 #if ANALOG_INPUTS > 0
@@ -862,8 +869,9 @@ void Extruder::selectExtruderById(uint8_t extruderId) {
         Printer::maxExtruderSpeed = 15;
 #endif
     float fmax = ((float)HAL::maxExtruderTimerFrequency() / ((float)Printer::maxExtruderSpeed * Printer::axisStepsPerMM[E_AXIS])); // Limit feedrate to interrupt speed
-    if (fmax < Printer::maxFeedrate[E_AXIS])
+    if (fmax < Printer::maxFeedrate[E_AXIS]) {
         Printer::maxFeedrate[E_AXIS] = fmax;
+    }
 #endif // USE_ADVANCE
     Extruder::current->tempControl.updateTempControlVars();
 #if DUAL_X_AXIS
@@ -970,6 +978,9 @@ void Extruder::recomputeMixingExtruderSteps() {
 #endif
 
 void Extruder::setTemperatureForExtruder(float temperatureInCelsius, uint8_t extr, bool beep, bool wait) {
+    if (Printer::failedMode && temperatureInCelsius > 0) {
+        return;
+    }
 #if NUM_EXTRUDER > 0
 #if MIXING_EXTRUDER || SHARED_EXTRUDER_HEATER
     extr = 0; // map any virtual extruder number to 0
@@ -1081,7 +1092,7 @@ void Extruder::setTemperatureForExtruder(float temperatureInCelsius, uint8_t ext
                 if (dirRising ? actExtruder->tempControl.currentTemperatureC >= actExtruder->tempControl.targetTemperatureC - 5 : actExtruder->tempControl.currentTemperatureC <= actExtruder->tempControl.targetTemperatureC + 5) {
                     maxWaitUntil = currentTime + 120000L;
                 }
-            } else if ((millis_t)(maxWaitUntil - currentTime) < 2000000000UL) {
+            } else if ((millis_t)(maxWaitUntil - currentTime) > 2000000000UL) {
                 break;
             }
             if ((waituntil == 0 && (dirRising ? actExtruder->tempControl.currentTemperatureC >= actExtruder->tempControl.targetTemperatureC - 1 : actExtruder->tempControl.currentTemperatureC <= actExtruder->tempControl.targetTemperatureC + 1))
@@ -1122,6 +1133,9 @@ void Extruder::setTemperatureForExtruder(float temperatureInCelsius, uint8_t ext
 }
 
 void Extruder::setHeatedBedTemperature(float temperatureInCelsius, bool beep) {
+    if (Printer::failedMode && temperatureInCelsius > 0) {
+        return;
+    }
 #if HAVE_HEATED_BED
     if (temperatureInCelsius > HEATED_BED_MAX_TEMP)
         temperatureInCelsius = HEATED_BED_MAX_TEMP;

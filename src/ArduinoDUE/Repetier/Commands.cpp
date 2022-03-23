@@ -26,6 +26,192 @@ int Commands::lowestRAMValue = MAX_RAM;
 int Commands::lowestRAMValueSend = MAX_RAM;
 millis_t lastCommandReceived = 0;
 
+#if defined(Z_PROBE_IIS2DH) && Z_PROBE_IIS2DH == 1
+#include <Wire.h>
+
+int accelerometer_state = 0;
+
+void accelerometer_send(uint8_t val) {
+#if FEATURE_Z_PROBE == 1
+    Wire.beginTransmission(Z_PROBE_ACCELEROMETER_I2C_ADDR);
+    Wire.write(val);
+    if (Wire.endTransmission(false))
+        //Myserial.println(F("send i2c error."));
+        Com::printFLN(PSTR("accelerometer send i2c failed."));
+#endif
+}
+
+void accelerometer_write(uint8_t reg, uint8_t val) {
+#if FEATURE_Z_PROBE == 1
+    Wire.beginTransmission(Z_PROBE_ACCELEROMETER_I2C_ADDR);
+    Wire.write(reg);
+    Wire.write(val);
+    if (Wire.endTransmission())
+        //Myserial.println(F("write i2c error."));
+        Com::printFLN(PSTR("accelerometer write i2c failed."));
+#endif
+}
+
+bool accelerometer_recv(uint8_t reg) {
+#if FEATURE_Z_PROBE == 1
+    uint8_t receiveByte;
+
+    accelerometer_send(reg); //Send an 8bit register to be read
+
+    Wire.requestFrom(Z_PROBE_ACCELEROMETER_I2C_ADDR, 1); //Request one 8bit response
+
+    if (Wire.available()) {
+        receiveByte = Wire.read();
+
+        //    Com::printF(PSTR("read reg "),reg);
+        //    Com::printFLN(PSTR(" value: "),receiveByte);
+        return true;
+    } else {
+        Com::printFLN(PSTR("accelerometer i2c recv failed."));
+        return false;
+        //Serial.println(F("i2c recv error."));
+    }
+#else
+    return false;
+#endif
+}
+
+void accelerometer_init() {
+#if FEATURE_Z_PROBE == 1
+    Com::printFLN(PSTR("iis2dh accelerometer initializing..."));
+    Wire.begin(); // join i2c bus
+
+    accelerometer_recv(0x0F); //WHO AM I = 0x6A
+
+    accelerometer_recv(0x31); //INT1_SRC (31h)
+
+    //CTRL_REG1 (20h)
+    accelerometer_recv(0x20);
+    accelerometer_write(0x20, 0b10011100); // ODR 5.376kHz in LPMode [7-4]. Low power enable [3]. Z enable [2].
+    accelerometer_recv(0x20);
+
+    //CTRL_REG3 (22h)
+    accelerometer_recv(0x22);
+    accelerometer_write(0x22, 0b01000000); // CLICK interrupt on INT1 pin [7]. AOI (And Or Interrupt) on INT1 en [6]. AOI on INT2 en [5].
+    accelerometer_recv(0x22);
+
+    //CTRL_REG6 (25h)
+    accelerometer_recv(0x25);
+    accelerometer_write(0x25, 0b000000); //Click interrupt on INT2 pin [7]. Interrupt 1 function enable on INT2 pin [6]. Interrupt 2 on INT2 pin enable [5]. 0=INT Active High [1].
+    accelerometer_recv(0x25);
+
+    //CTRL_REG4 (23h)
+    accelerometer_recv(0x23);
+    accelerometer_write(0x23, 0b00110000); // Full-scale selection 16G [5-4]. High resolution mode [3].
+    accelerometer_recv(0x23);
+
+    //CTRL_REG5 (24h)
+    accelerometer_recv(0x24);
+    accelerometer_write(0x24, 0b01001010); // FIFO enable [6]. Latch INT1 [3]. Latch INT2 until cleared by read [1].
+    accelerometer_recv(0x24);
+
+    //INT1_CFG (30h)
+    accelerometer_recv(0x30);
+    accelerometer_write(0x30, 0b100000); // ZHI events enabled [5]. ZLO events enabled [4].
+    accelerometer_recv(0x30);
+
+    //INT1_SRC (31h)
+    accelerometer_recv(0x31);
+
+    //INT1_THS (32h)  this is the i2c probe
+    accelerometer_recv(0x32);
+    accelerometer_write(0x32, Z_PROBE_SENSITIVITY); // 7bits
+    accelerometer_recv(0x32);
+
+    //INT1_DURATION (33h)
+    accelerometer_recv(0x33);
+    accelerometer_write(0x33, 0);
+    accelerometer_recv(0x33);
+
+    //INT2_CFG (34h)
+    accelerometer_recv(0x34);
+    accelerometer_write(0x34, 0b000000); // ZHI events not enabled on INT2 [5].
+    accelerometer_recv(0x34);
+
+    //INT2_SRC (35h)
+
+    //INT2_THS (36h)
+    accelerometer_recv(0x36);
+    accelerometer_write(0x36, 50); // 7bits
+    accelerometer_recv(0x36);
+
+    //INT2_DURATION (37h)
+    accelerometer_recv(0x37);
+    accelerometer_write(0x37, 0);
+    accelerometer_recv(0x37);
+
+    //CLICK_CFG (38h)
+    accelerometer_recv(0x38);
+    accelerometer_write(0x38, 0b10000); //Single Click Z axis
+    accelerometer_recv(0x38);
+
+    //CLICK_SRC (39h)
+    accelerometer_recv(0x39);
+
+    //CLICK_THS (3Ah)
+    accelerometer_recv(0x3A);
+    accelerometer_write(0x3A, 50);
+    accelerometer_recv(0x3A);
+
+    accelerometer_recv(0x32);
+
+    accelerometer_write(0x32, uint8_t(Z_PROBE_SENSITIVITY)); //INT1 THRESHOLD
+    accelerometer_write(0x3A, uint8_t(Z_PROBE_SENSITIVITY)); //CLICK THRESHOLD
+    accelerometer_recv(0x32);
+
+    accelerometer_state = 1;
+#endif
+}
+
+bool accelerometer_status() {
+#if FEATURE_Z_PROBE == 1
+    bool retValue = true;
+
+    if (accelerometer_state == 0) {
+        accelerometer_init();
+    }
+
+    if (!accelerometer_recv(0x31)) {
+        retValue = false;
+    } //INT1_SRC (31h)
+    if (!accelerometer_recv(0x35)) {
+        retValue = false;
+    } //INT1_SRC (31h)
+    if (!accelerometer_recv(0x39)) {
+        retValue = false;
+    } //INT1_SRC (31h)
+    if (!accelerometer_recv(0x2D)) {
+        retValue = false;
+    } //INT1_SRC (31h)
+
+    return (retValue);
+#else
+    return (false);
+#endif
+}
+
+bool accelerometer_ready() {
+#if FEATURE_Z_PROBE == 1
+    bool retValue = true;
+    if (!accelerometer_status()) {
+        delay(250);
+        if (!accelerometer_status()) {
+            retValue = false;
+        }
+    }
+
+    return (retValue);
+#else
+    return (false);
+#endif
+}
+#endif // Z_PROBE_IIS2DH
+
 void Commands::commandLoop() {
     // while(true) {
 #ifdef DEBUG_PRINT
@@ -346,8 +532,8 @@ void Commands::reportPrinterUsage() {
 // Digipot methods for controling current and microstepping
 
 #if defined(DIGIPOTSS_PIN) && DIGIPOTSS_PIN > -1
-int digitalPotWrite(int address,
-                    uint16_t value) { // From Arduino DigitalPotControl example
+void digitalPotWrite(int address,
+                     uint16_t value) { // From Arduino DigitalPotControl example
     if (value > 255)
         value = 255;
     WRITE(DIGIPOTSS_PIN, LOW); // take the SS pin low to select the chip
@@ -1699,6 +1885,10 @@ void Commands::processGCode(GCode* com) {
                 GCode::fatalError(PSTR("G30 probing failed!"));
                 break;
             }
+#if Z_PROBE_Z_OFFSET_MODE == 1
+            z -= Printer::zBedOffset; // We measured including coating, so we
+                                      // need to subtract coating thickness!
+#endif
             if (com->hasR() || com->hasH()) {
                 float h = Printer::convertToMM(com->hasH() ? com->H : 0);
                 float o = Printer::convertToMM(com->hasR() ? com->R : h);
@@ -1760,37 +1950,64 @@ void Commands::processGCode(GCode* com) {
         }
     } break;
 #endif
+#if FEATURE_AUTOLEVEL
+    case 35: // G35 test accelerometer zProbe setup
+#if defined(Z_PROBE_IIS2DH) && Z_PROBE_IIS2DH == 1
+        if (!accelerometer_ready()) {
+            Com::printFLN(PSTR("I2C Error - Calibration Aborted"));
+            GCode::executeFString(PSTR("M117 I2C Error. Aborting"));
+            break;
+        }
+        GCode::executeFString(PSTR("M104 S0\nM140 S0\nM107")); // Turn off hotend heating, bed heating, print cooling fan
+#endif                                                         // Z_PROBE_IIS2DH
+        Endstops::update();
+        Endstops::update();
+        Com::printF(Com::tZProbeState);
+        Com::printF(Endstops::zProbe() ? Com::tHSpace : Com::tLSpace);
+        Com::println();
+        break;
+#endif
 #endif
     case 90: // G90
         Printer::relativeCoordinateMode = false;
-        if (com->internalCommand)
+        if (com->internalCommand) {
             Com::printInfoFLN(PSTR("Absolute positioning"));
+        }
         break;
     case 91: // G91
         Printer::relativeCoordinateMode = true;
-        if (com->internalCommand)
+        if (com->internalCommand) {
             Com::printInfoFLN(PSTR("Relative positioning"));
+        }
         break;
     case 92: { // G92
         float xOff = Printer::coordinateOffset[X_AXIS];
         float yOff = Printer::coordinateOffset[Y_AXIS];
         float zOff = Printer::coordinateOffset[Z_AXIS];
-        if (com->hasX())
+        if (com->hasX()) {
             xOff = Printer::convertToMM(com->X) - Printer::currentPosition[X_AXIS];
-        if (com->hasY())
+        }
+        if (com->hasY()) {
             yOff = Printer::convertToMM(com->Y) - Printer::currentPosition[Y_AXIS];
-        if (com->hasZ())
+        }
+        if (com->hasZ()) {
             zOff = Printer::convertToMM(com->Z) - Printer::currentPosition[Z_AXIS];
+        }
         Printer::setOrigin(xOff, yOff, zOff);
         if (com->hasE()) {
             Printer::destinationPositionTransformed[E_AXIS] = Printer::currentPositionTransformed[E_AXIS] = Printer::convertToMM(com->E);
             Printer::destinationSteps[E_AXIS] = Printer::currentPositionSteps[E_AXIS] = Printer::destinationPositionTransformed[E_AXIS] * Printer::axisStepsPerMM[E_AXIS];
         }
-        if (com->hasX() || com->hasY() || com->hasZ()) {
-            Com::printF(PSTR("X_OFFSET:"), Printer::coordinateOffset[X_AXIS], 3);
-            Com::printF(PSTR(" Y_OFFSET:"), Printer::coordinateOffset[Y_AXIS], 3);
-            Com::printFLN(PSTR(" Z_OFFSET:"), Printer::coordinateOffset[Z_AXIS], 3);
+        if (!(com->hasX() || com->hasY() || com->hasZ() || com->hasE())) {
+            Printer::setOrigin(0, 0, 0);
         }
+        if (!com->hasX() && !com->hasY() && !com->hasZ() && !com->hasE()) {
+            Printer::setOrigin(0, 0, 0);
+            Com::printFLN(PSTR("RESET X Y Z origin"));
+        }
+        Com::printF(PSTR("X_OFFSET:"), Printer::coordinateOffset[X_AXIS], 3);
+        Com::printF(PSTR(" Y_OFFSET:"), Printer::coordinateOffset[Y_AXIS], 3);
+        Com::printFLN(PSTR(" Z_OFFSET:"), Printer::coordinateOffset[Z_AXIS], 3);
     } break;
 #if DRIVE_SYSTEM == DELTA
     case 100: { // G100 Calibrate floor or rod radius
@@ -2197,7 +2414,11 @@ void Commands::processMCode(GCode* com) {
         }
         break;
     case 24: // M24 - Start SD print
-        sd.startPrint();
+        if (Printer::isMenuMode(MENU_MODE_PAUSED)) {
+            sd.continuePrint();
+        } else {
+            sd.startPrint();
+        }
         break;
     case 25: // M25 - Pause SD print
         sd.pausePrint();
@@ -2461,23 +2682,27 @@ void Commands::processMCode(GCode* com) {
     case 109: // M109 - Wait for extruder heater to reach target.
 #if NUM_EXTRUDER > 0
     {
-        if (reportTempsensorError())
+        if (reportTempsensorError()) {
             break;
+        }
         previousMillisCmd = HAL::timeInMilliseconds();
-        if (Printer::debugDryrun())
+        if (Printer::debugDryrun()) {
             break;
+        }
         Commands::waitUntilEndOfAllMoves();
         Extruder* actExtruder = Extruder::current;
-        if (com->hasT() && com->T < NUM_EXTRUDER)
+        if (com->hasT() && com->T < NUM_EXTRUDER) {
             actExtruder = &extruder[com->T];
-        if (com->hasS())
+        }
+        if (com->hasS()) {
             Extruder::setTemperatureForExtruder(com->S + (com->hasO() ? com->O : 0),
                                                 actExtruder->id,
                                                 com->hasF() && com->F > 0, true);
-        else if (com->hasH())
+        } else if (com->hasH()) {
             Extruder::setTemperatureForExtruder(
                 actExtruder->tempControl.preheatTemperature + (com->hasO() ? com->O : 0),
                 actExtruder->id, com->hasF() && com->F > 0, true);
+        }
     }
 #endif
         previousMillisCmd = HAL::timeInMilliseconds();
@@ -2488,15 +2713,17 @@ void Commands::processMCode(GCode* com) {
             break;
         UI_STATUS_UPD_F(Com::translatedF(UI_TEXT_HEATING_BED_ID));
         Commands::waitUntilEndOfAllMoves();
-        if (com->hasS())
+        if (com->hasS()) {
             Extruder::setHeatedBedTemperature(com->S + (com->hasO() ? com->O : 0),
                                               com->hasF() && com->F > 0);
-        else if (com->hasH())
+        } else if (com->hasH()) {
             Extruder::setHeatedBedTemperature(heatedBedController.preheatTemperature + (com->hasO() ? com->O : 0),
                                               com->hasF() && com->F > 0);
+        }
 #if defined(SKIP_M190_IF_WITHIN) && SKIP_M190_IF_WITHIN > 0
-        if (abs(heatedBedController.currentTemperatureC - heatedBedController.targetTemperatureC) < SKIP_M190_IF_WITHIN)
+        if (abs(heatedBedController.currentTemperatureC - heatedBedController.targetTemperatureC) < SKIP_M190_IF_WITHIN) {
             break;
+        }
 #endif
         EVENT_WAITING_HEATER(-1);
         tempController[HEATED_BED_INDEX]->waitForTargetTemperature();
@@ -2794,10 +3021,11 @@ void Commands::processMCode(GCode* com) {
         if (com->hasE()) {
             Printer::maxFeedrate[E_AXIS] = com->E / 60.0f;
         }
-        if (com->hasS())
+        if (com->hasS()) {
             manageMonitor = com->S != 255;
-        else
+        } else {
             manageMonitor = 0;
+        }
         break;
     case 204: { // M204
         TemperatureController* temp = &Extruder::current->tempControl;
@@ -2872,10 +3100,10 @@ void Commands::processMCode(GCode* com) {
         }
     } break;
     case 220: // M220 S<Feedrate multiplier in percent>
-        changeFeedrateMultiply(com->getS(100));
+        changeFeedrateMultiply(com->getS(Printer::feedrateMultiply));
         break;
     case 221: // M221 S<Extrusion flow multiplier in percent>
-        changeFlowrateMultiply(com->getS(100));
+        changeFlowrateMultiply(com->getS(Printer::extrudeMultiply));
         break;
     case 226: // M226 P<pin> S<state 0/1> - Wait for pin getting state S
         if (!com->hasS() || !com->hasP())
@@ -3090,11 +3318,13 @@ void Commands::processMCode(GCode* com) {
         if (com->hasP() && com->P < 4 && com->P >= 0) {
             ENSURE_POWER
             int s = 0;
-            if (com->hasS())
+            if (com->hasS()) {
                 s = com->S;
+            }
             uint16_t r = 0;
-            if (com->hasR()) // auto off time in ms
+            if (com->hasR()) { // auto off time in ms
                 r = com->R;
+            }
             HAL::servoMicroseconds(com->P, s, r);
         }
         break;
@@ -3706,8 +3936,13 @@ void Commands::emergencyStop() {
     // HAL::forbidInterrupts(); // Don't allow interrupts to do their work
     Printer::kill(false);
     Extruder::manageTemperatures();
-    for (uint8_t i = 0; i < NUM_EXTRUDER + 3; i++)
+    for (uint8_t i = 0; i < NUM_EXTRUDER + 3; i++) {
         pwm_pos[i] = 0;
+    }
+#if defined(SUPPORT_LASER) && SUPPORT_LASER
+    LaserDriver::changeIntensity(0);
+    LaserDriver::laserOn = false;
+#endif
 #if EXT0_HEATER_PIN > -1 && NUM_EXTRUDER > 0
     WRITE(EXT0_HEATER_PIN, HEATER_PINS_INVERTED);
 #endif
@@ -3733,7 +3968,7 @@ void Commands::emergencyStop() {
     WRITE(HEATED_BED_HEATER_PIN, HEATER_PINS_INVERTED);
 #endif
     UI_STATUS_UPD_F(Com::translatedF(UI_TEXT_KILLED_ID));
-    HAL::delayMilliseconds(200);
+    HAL::delayMilliseconds(200); // wait for pwms to set harmless values
     InterruptProtectedBlock noInts;
     while (1) {
     }

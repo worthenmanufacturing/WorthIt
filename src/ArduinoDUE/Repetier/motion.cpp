@@ -102,6 +102,9 @@ correct positions when changing tools.
 \param pathOptimize If false start and end speeds get fixed to minimum values.
 */
 void PrintLine::moveRelativeDistanceInSteps(int32_t x, int32_t y, int32_t z, int32_t e, float feedrate, bool waitEnd, bool checkEndstop, bool pathOptimize) {
+    if (Printer::failedMode) {
+        return;
+    }
     Printer::unparkSafety();
 #if NUM_EXTRUDER > 0
     if (Printer::debugDryrun() || (MIN_EXTRUDER_TEMP > 30 && Extruder::current->tempControl.currentTemperatureC < MIN_EXTRUDER_TEMP && !Printer::isColdExtrusionAllowed() && Extruder::current->tempControl.sensorType != 0))
@@ -162,6 +165,9 @@ Will use Printer::isPositionAllowed to prevent illegal moves.
 \param pathOptimize If false start and end speeds get fixed to minimum values.
 */
 void PrintLine::moveRelativeDistanceInStepsReal(int32_t x, int32_t y, int32_t z, int32_t e, float feedrate, bool waitEnd, bool pathOptimize) {
+    if (Printer::failedMode) {
+        return;
+    }
     Printer::unparkSafety();
 #if MOVE_X_WHEN_HOMED == 1 || MOVE_Y_WHEN_HOMED == 1 || MOVE_Z_WHEN_HOMED == 1
     if (!Printer::isHoming() && !Printer::isNoDestinationCheck()) { // prevent movements when not homed
@@ -569,27 +575,31 @@ void PrintLine::calculateMove(float axisDistanceMM[], uint8_t pathOptimize, fast
 #if !NONLINEAR_SYSTEM || defined(FAST_COREXYZ)
         limitInterval = RMath::max(axisInterval[X_AXIS], limitInterval);
 #endif
-    } else
+    } else {
         axisInterval[X_AXIS] = 0;
+    }
     if (isYMove()) {
         axisInterval[Y_AXIS] = axisDistanceMM[Y_AXIS] * toTicks / Printer::maxFeedrate[Y_AXIS];
 #if !NONLINEAR_SYSTEM || defined(FAST_COREXYZ)
         limitInterval = RMath::max(axisInterval[Y_AXIS], limitInterval);
 #endif
-    } else
+    } else {
         axisInterval[Y_AXIS] = 0;
+    }
     if (isZMove()) {                                                                            // normally no move in z direction
         axisInterval[Z_AXIS] = axisDistanceMM[Z_AXIS] * toTicks / Printer::maxFeedrate[Z_AXIS]; // must prevent overflow!
 #if !NONLINEAR_SYSTEM || defined(FAST_COREXYZ)
         limitInterval = RMath::max(axisInterval[Z_AXIS], limitInterval);
 #endif
-    } else
+    } else {
         axisInterval[Z_AXIS] = 0;
+    }
     if (isEMove()) {
         axisInterval[E_AXIS] = axisDistanceMM[E_AXIS] * toTicks / Printer::maxFeedrate[E_AXIS];
         limitInterval = RMath::max(axisInterval[E_AXIS], limitInterval);
-    } else
+    } else {
         axisInterval[E_AXIS] = 0;
+    }
 #if DRIVE_SYSTEM == DELTA
     if (axisDistanceMM[VIRTUAL_AXIS] >= 0) { // only for deltas all speeds in all directions have same limit
         axisInterval[VIRTUAL_AXIS] = axisDistanceMM[VIRTUAL_AXIS] * toTicks / (Printer::maxFeedrate[Z_AXIS]);
@@ -1728,7 +1738,7 @@ bool NonlinearSegment::checkEndstops(PrintLine* cur, bool checkall) {
 #endif
         if (isZPositiveMove() && Endstops::zMax()) {
 #if MAX_HARDWARE_ENDSTOP_Z
-            if (Printer::stepsRemainingAtZHit)
+            if (Printer::stepsRemainingAtZHit < 0)
                 Printer::stepsRemainingAtZHit = cur->stepsRemaining;
 #endif
             setZMoveFinished();
@@ -2043,7 +2053,7 @@ uint8_t PrintLine::queueNonlinearMove(uint8_t check_endstops, uint8_t pathOptimi
         return true;
     }
 
-    int16_t segmentCount;
+    int32_t segmentCount;
 #if DRIVE_SYSTEM == DELTA
     float feedrate = RMath::min(Printer::feedrate, Printer::maxFeedrate[Z_AXIS]);
 #else
@@ -2057,7 +2067,7 @@ uint8_t PrintLine::queueNonlinearMove(uint8_t check_endstops, uint8_t pathOptimi
         Com::printFLN(Com::tDBGDeltaSeconds, seconds);
 #endif
         float sps = static_cast<float>((cartesianDir & ESTEP) == ESTEP ? Printer::printMovesPerSecond : Printer::travelMovesPerSecond);
-        segmentCount = RMath::max(1, static_cast<int16_t>(sps * seconds));
+        segmentCount = RMath::max(static_cast<int32_t>(1), static_cast<int32_t>(sps * seconds));
 #ifdef DEBUG_SEGMENT_LENGTH
         float segDist = cartesianDistance / (float)segmentCount;
         if (segDist > Printer::maxRealSegmentLength) {
@@ -2082,8 +2092,9 @@ uint8_t PrintLine::queueNonlinearMove(uint8_t check_endstops, uint8_t pathOptimi
 
     int32_t startPosition[E_AXIS_ARRAY], fractionalSteps[E_AXIS_ARRAY];
     if (numLines > 1) {
-        for (fast8_t i = 0; i < Z_AXIS_ARRAY; i++)
+        for (fast8_t i = 0; i < Z_AXIS_ARRAY; i++) {
             startPosition[i] = Printer::currentPositionSteps[i];
+        }
         startPosition[E_AXIS] = 0;
         cartesianDistance /= static_cast<float>(numLines);
     }

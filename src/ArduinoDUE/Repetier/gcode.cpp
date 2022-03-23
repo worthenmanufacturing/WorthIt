@@ -1263,10 +1263,12 @@ void GCode::printCommand() {
 void GCode::fatalError(FSTRINGPARAM(message)) {
     fatalErrorMsg = message;
     Printer::stopPrint();
-    if (Printer::currentPosition[Z_AXIS] < Printer::zMin + Printer::zLength - 15)
+    if (Printer::isZHomed() && Printer::currentPosition[Z_AXIS] < Printer::zMin + Printer::zLength - 15) {
         PrintLine::moveRelativeDistanceInSteps(
             0, 0, 10 * Printer::axisStepsPerMM[Z_AXIS], 0,
             Printer::homingFeedrate[Z_AXIS], true, true);
+    }
+    Printer::setHoming(false);
     EVENT_FATAL_ERROR_OCCURED
     Commands::waitUntilEndOfAllMoves();
     Printer::kill(false);
@@ -1274,6 +1276,8 @@ void GCode::fatalError(FSTRINGPARAM(message)) {
     WRITE(PS_ON_PIN, (POWER_INVERTING ? LOW : HIGH));
     Printer::setPowerOn(false);
 #endif
+    Printer::setMenuMode(MENU_MODE_FAILED, true);
+    Printer::failedMode = true;
     reportFatalError();
 }
 
@@ -1289,6 +1293,7 @@ void GCode::reportFatalError() {
 void GCode::resetFatalError() {
     Com::writeToAll = true;
     Printer::failedMode = false;
+    Printer::setMenuMode(MENU_MODE_FAILED, false);
     TemperatureController::resetAllErrorStates();
     Printer::debugReset(8); // disable dry run
     fatalErrorMsg = NULL;
@@ -1464,7 +1469,7 @@ int SerialGCodeSource::readByte() {
 #endif
 }
 void SerialGCodeSource::writeByte(uint8_t byte) { stream->write(byte); }
-void SerialGCodeSource::close() {}
+void SerialGCodeSource::close() { }
 void SerialGCodeSource::prefetchContent() {
 #if EMERGENCY_PARSER
     while (stream->available() && bufLength < SERIAL_IN_BUFFER) {

@@ -87,6 +87,8 @@ To override EEPROM settings with config settings, set EEPROM_MODE 0
 #define POWERLOSS_PIN -1
 // State to signal power loss
 #define POWERLOSS_DETECTED 0
+// Go into fatal error mode when endstop is not triggered during homing
+#define SAFE_HOMING 1
 
 // Override pin definitions from pins.h
 //#define FAN_PIN   4  // Extruder 2 uses the default fan output, so move to an other pin
@@ -1621,12 +1623,14 @@ to recalibrate z.
 */
 #define Z_PROBE_Z_OFFSET_MODE 0
 
-#define FEATURE_Z_PROBE 0
+#define FEATURE_Z_PROBE 1
 // Especially if you have more then 1 extruder acting as z probe this is important!
 #define EXTRUDER_IS_Z_PROBE 0
+// Set to 1 for accelerometer z probe like used in SeeMeCNC Rostock
+#define Z_PROBE_IIS2DH 0
 // Disable all heaters before probing - required for inductive sensors
 #define Z_PROBE_DISABLE_HEATERS 0
-#define Z_PROBE_PIN -1 // 63
+#define Z_PROBE_PIN ORIG_Z_MIN_PIN // 63
 #define Z_PROBE_PULLUP 1
 #define Z_PROBE_ON_HIGH 1
 #define Z_PROBE_X_OFFSET 0

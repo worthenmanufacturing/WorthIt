@@ -26,7 +26,7 @@
 #include <math.h>
 #include <stdint.h>
 
-#define REPETIER_VERSION "1.0.4"
+#define REPETIER_VERSION "1.0.5"
 
 // Use new communication model for multiple channels - only until stable, then
 // old version gets deleted
@@ -267,6 +267,32 @@ Switch it off for production, it costs execution time. */
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
 #include "Configuration.h"
+
+#ifndef SAFE_HOMING
+#define SAFE_HOMING 0
+#endif
+
+#ifndef EXT0_HARDWARE_PWM
+#define EXT0_HARDWARE_PWM 0
+#endif
+#ifndef EXT1_HARDWARE_PWM
+#define EXT1_HARDWARE_PWM 0
+#endif
+#ifndef EXT2_HARDWARE_PWM
+#define EXT2_HARDWARE_PWM 0
+#endif
+#ifndef EXT3_HARDWARE_PWM
+#define EXT3_HARDWARE_PWM 0
+#endif
+#ifndef EXT4_HARDWARE_PWM
+#define EXT4_HARDWARE_PWM 0
+#endif
+#ifndef EXT5_HARDWARE_PWM
+#define EXT5_HARDWARE_PWM 0
+#endif
+#ifndef BED_HARDWARE_PWM
+#define BED_HARDWARE_PWM 0
+#endif
 
 #if USE_ADVANCE && ENABLE_QUADRATIC_ADVANCE && ENABLED(TEMP_GAIN)
 #error You can not enable TEMP_GAIN and ENABLE_QUADRATIC_ADVANCE the same time. Please disable one feature.
@@ -681,6 +707,7 @@ inline void memcopy4(void* dest, void* source) {
 #define MENU_MODE_FDM 128
 #define MENU_MODE_LASER 256
 #define MENU_MODE_CNC 512
+#define MENU_MODE_FAILED 1024
 
 #ifndef BENDING_CORRECTION_A
 #define BENDING_CORRECTION_A 0
@@ -1206,9 +1233,9 @@ public:
         plane.b = ((sum_x * sum_xy - sum_xx * sum_y) * sum_z + (n * sum_xx - sum_x * sum_x) * sum_yz + sum_xz * (sum_x * sum_y - n * sum_xy)) / det;
         plane.c = ((sum_xx * sum_yy - sum_xy * sum_xy) * sum_z + (sum_x * sum_xy - sum_xx * sum_y) * sum_yz + sum_xz * (sum_xy * sum_y - sum_x * sum_yy)) / det;
         if (!silent) {
-            Com::printF(PSTR("plane: a = "), plane.a, 4);
-            Com::printF(PSTR(" b = "), plane.b, 4);
-            Com::printFLN(PSTR(" c = "), plane.c, 4);
+            Com::printF(PSTR("plane: a = "), plane.a, 5);
+            Com::printF(PSTR(" b = "), plane.b, 5);
+            Com::printFLN(PSTR(" c = "), plane.c, 5);
         }
     }
 };

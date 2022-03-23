@@ -357,6 +357,8 @@ public:
     static int initHardwarePWM(int pinNumber, uint32_t frequency);
     // Set pwm output to value. id is id from initHardwarePWM.
     static void setHardwarePWM(int id, int value);
+    // Set pwm frequency to value. id is id from initHardwarePWM.
+    static void setHardwareFrequency(int id, uint32_t frequency);
 
     // do any hardware-specific initialization here
     static inline void hwSetup(void) {
@@ -666,7 +668,7 @@ public:
     }
     static inline unsigned long timeInMilliseconds() { return millis(); }
     static inline char readFlashByte(PGM_P ptr) { return pgm_read_byte(ptr); }
-    static inline int16_t readFlashWord(PGM_P ptr) { return pgm_read_word(ptr); }
+    static inline int16_t readFlashWord(const uint16_t* ptr) { return pgm_read_word(ptr); }
 
     static inline void serialSetBaudrate(long baud) {
         Serial.setInterruptPriority(1);
@@ -844,7 +846,7 @@ public:
         WDT->WDT_MR = WDT_MR_WDRSTEN | WATCHDOG_INTERVAL | (WATCHDOG_INTERVAL << 16);
         WDT->WDT_CR = 0xA5000001;
     };
-    inline static void stopWatchdog() {}
+    inline static void stopWatchdog() { }
     inline static void pingWatchdog() {
 #if FEATURE_WATCHDOG
         wdPinged = true;
